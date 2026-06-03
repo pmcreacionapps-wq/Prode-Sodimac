@@ -1,0 +1,329 @@
+// This is your Prisma schema file for Next World Cup Prode
+// FIFA World Cup 2026 - Next English Institute
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Auth (Supabase Auth UUID)
+  supabaseId String @unique @map("supabase_id")
+
+  // Profile
+  firstName String  @map("first_name")
+  lastName  String  @map("last_name")
+  nickname  String  @unique
+  email     String  @unique
+  curso     String?
+  avatarUrl String? @map("avatar_url")
+
+  // Roles
+  isAdmin   Boolean @default(false) @map("is_admin")
+  isBlocked Boolean @default(false) @map("is_blocked")
+
+  // Stats (denormalized for performance)
+  totalPoints   Int @default(0) @map("total_points")
+  exactScores   Int @default(0) @map("exact_scores")
+  correctWinner Int @default(0) @map("correct_winner")
+  streak        Int @default(0) // current streak
+  maxStreak     Int @default(0) @map("max_streak")
+
+  // Relations
+  predictions        Prediction[]
+  weeklyScores       WeeklyScore[]
+  semifinalistPicks  SemifinalistPick[]
+  badges             UserBadge[]
+  notifications      Notification[]
+  rankingHistories   RankingHistory[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────
+// TEAMS
+// ─────────────────────────────────────────
+model Team {
+  id        String @id @default(cuid())
+  name      String @unique
+  shortName String @map("short_name")
+  flagUrl   String @map("flag_url")
+  group     String? // A, B, C ... L (32 teams, 8 groups of 4... or 12 groups of 4 for 48-team WC)
+
+  // External API
+  apiId     Int?    @unique @map("api_id") // ID from API-Football
+
+  // Relations
+  homeMatches Match[] @relation("HomeTeam")
+  awayMatches Match[] @relation("AwayTeam")
+  semifinalistPicks SemifinalistPick[]
+
+  @@map("teams")
+}
+
+// ─────────────────────────────────────────
+// MATCHES
+// ─────────────────────────────────────────
+model Match {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // External API
+  apiId     Int?    @unique @map("api_id")
+
+  // Teams
+  homeTeamId String @map("home_team_id")
+  awayTeamId String @map("away_team_id")
+  homeTeam   Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
+
+  // Schedule
+  kickoffAt DateTime  @map("kickoff_at")
+  venue     String?
+  city      String?
+
+  // Phase
+  phase     MatchPhase
+  groupName String?    @map("group_name") // "A", "B", etc. only for group stage
+  matchDay  Int?       @map("match_day")  // 1, 2, 3 for group stage
+  roundName String?    @map("round_name") // "Round of 32", "Quarter-final", etc.
+
+  // Status
+  status    MatchStatus @default(SCHEDULED)
+
+  // Results (null until played)
+  homeScore Int? @map("home_score")
+  awayScore Int? @map("away_score")
+
+  // Who won (null if draw or not played)
+  winnerId  String? @map("winner_id")
+
+  // Prediction lock — automatically true when kickoffAt is reached
+  predictionsLocked Boolean @default(false) @map("predictions_locked")
+
+  // Relations
+  predictions Prediction[]
+
+  @@index([kickoffAt])
+  @@index([phase])
+  @@index([status])
+  @@map("matches")
+}
+
+enum MatchPhase {
+  GROUP
+  ROUND_OF_32
+  ROUND_OF_16
+  QUARTER_FINAL
+  SEMI_FINAL
+  THIRD_PLACE
+  FINAL
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────
+// PREDICTIONS
+// ─────────────────────────────────────────
+model Prediction {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userId  String @map("user_id")
+  matchId String @map("match_id")
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  // Predicted result
+  predictedHomeScore Int @map("predicted_home_score")
+  predictedAwayScore Int @map("predicted_away_score")
+
+  // Points awarded (null until match is finished and scored)
+  pointsEarned Int? @map("points_earned")
+  isExactScore Boolean? @map("is_exact_score")
+  isCorrectWinner Boolean? @map("is_correct_winner")
+
+  // Week number (for weekly leaderboard)
+  weekNumber Int @map("week_number")
+
+  @@unique([userId, matchId])
+  @@index([userId])
+  @@index([matchId])
+  @@index([weekNumber])
+  @@map("predictions")
+}
+
+// ─────────────────────────────────────────
+// SEMIFINALIST PICKS
+// ─────────────────────────────────────────
+model SemifinalistPick {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId String @map("team_id")
+  team   Team   @relation(fields: [teamId], references: [id])
+
+  // Result (filled when semis are played)
+  isCorrect Boolean? @map("is_correct")
+  bonusPoints Int    @default(0) @map("bonus_points") // 2 per correct pick
+
+  @@unique([userId, teamId])
+  @@index([userId])
+  @@map("semifinalist_picks")
+}
+
+// ─────────────────────────────────────────
+// WEEKLY SCORES
+// ─────────────────────────────────────────
+model WeeklyScore {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  userId     String @map("user_id")
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  weekNumber Int @map("week_number")
+  points     Int @default(0)
+  exactScores Int @default(0) @map("exact_scores")
+  rank       Int? // rank for that week
+
+  @@unique([userId, weekNumber])
+  @@index([weekNumber])
+  @@map("weekly_scores")
+}
+
+// ─────────────────────────────────────────
+// RANKING HISTORY (for evolution chart)
+// ─────────────────────────────────────────
+model RankingHistory {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  userId     String @map("user_id")
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  afterMatchId String @map("after_match_id") // snapshot after this match
+  rank         Int
+  totalPoints  Int    @map("total_points")
+
+  @@index([userId])
+  @@map("ranking_history")
+}
+
+// ─────────────────────────────────────────
+// BADGES / ACHIEVEMENTS
+// ─────────────────────────────────────────
+model Badge {
+  id          String @id @default(cuid())
+  name        String @unique
+  description String
+  icon        String // emoji or icon name
+  condition   String // human-readable condition
+
+  users UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId  String @map("user_id")
+  badgeId String @map("badge_id")
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge   Badge  @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+model Notification {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId  String  @map("user_id")
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    NotificationType
+  title   String
+  body    String
+  read    Boolean @default(false)
+  data    Json?   // extra payload
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  MATCH_STARTING   // 30 min before kickoff
+  RANK_CHANGE      // moved up to top 3
+  SCORE_UPDATED    // results updated
+  BADGE_EARNED     // new badge
+  ANNOUNCEMENT     // admin announcement
+}
+
+// ─────────────────────────────────────────
+// ADMIN ANNOUNCEMENTS
+// ─────────────────────────────────────────
+model Announcement {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title     String
+  body      String
+  active    Boolean  @default(true)
+  pinned    Boolean  @default(false)
+  expiresAt DateTime? @map("expires_at")
+
+  @@map("announcements")
+}
+
+// ─────────────────────────────────────────
+// ADMIN SETTINGS
+// ─────────────────────────────────────────
+model AdminSettings {
+  id    String @id @default("singleton")
+
+  // Scoring
+  pointsExactScore   Int @default(3) @map("points_exact_score")
+  pointsCorrectWinner Int @default(1) @map("points_correct_winner")
+  pointsSemifinalist  Int @default(2) @map("points_semifinalist")
+
+  // Tournament state
+  tournamentActive Boolean @default(true) @map("tournament_active")
+  predictionsOpen  Boolean @default(true) @map("predictions_open")
+  currentWeek      Int     @default(1) @map("current_week")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_settings")
+}
