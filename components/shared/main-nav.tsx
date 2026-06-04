@@ -34,10 +34,10 @@ export function MainNav({ user }: MainNavProps) {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <div className="h-7 w-7 rounded-lg bg-blue-600 flex items-center justify-center">
-            <span className="text-white font-bold text-xs">N</span>
+            <span className="text-white font-bold text-xs">S</span>
           </div>
           <span className="font-semibold text-sm hidden sm:block">
-            Next World Cup
+            Prode Sodimac
           </span>
         </Link>
 
