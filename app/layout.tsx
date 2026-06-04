@@ -1,7 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import "./globals.css";
+import { Inter } from "next/font/google";
+import "@/styles/globals.css";
 import { Providers } from "@/components/shared/providers";
 import { Toaster } from "@/components/ui/toaster";
+
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -45,7 +53,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className="min-h-screen bg-background font-sans antialiased">
         <Providers>
           {children}
