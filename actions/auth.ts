@@ -8,15 +8,15 @@ import { z } from "zod";
 import type { ActionResponse } from "@/types";
 
 const registerSchema = z.object({
-  firstName: z.string().min(2, "First name must be at least 2 characters"),
-  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  firstName: z.string().min(2, "Mínimo 2 caracteres"),
+  lastName: z.string().min(2, "Mínimo 2 caracteres"),
   nickname: z
     .string()
-    .min(3, "Nickname must be at least 3 characters")
-    .max(20, "Nickname must be at most 20 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Nickname can only contain letters, numbers, and underscores"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+    .min(3, "Mínimo 3 caracteres")
+    .max(20, "Máximo 20 caracteres")
+    .regex(/^[a-zA-Z0-9_]+$/, "Solo letras, números y guión bajo"),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(8, "Mínimo 8 caracteres"),
   curso: z.string().optional(),
 });
 
@@ -34,14 +34,15 @@ export async function registerAction(
     nickname: formData.get("nickname") as string,
     email: formData.get("email") as string,
     password: formData.get("password") as string,
-    curso: formData.get("curso") as string | undefined,
+    // FIX: convertir null → undefined para que Zod lo acepte como opcional
+    curso: (formData.get("curso") as string | null) ?? undefined,
   };
 
   const parsed = registerSchema.safeParse(raw);
   if (!parsed.success) {
     return {
       success: false,
-      error: parsed.error.issues[0]?.message ?? "Validation error",
+      error: parsed.error.issues[0]?.message ?? "Error de validación",
     };
   }
 
@@ -53,7 +54,7 @@ export async function registerAction(
     where: { nickname: nicknameNormalized },
   });
   if (existing) {
-    return { success: false, error: "That nickname is already taken" };
+    return { success: false, error: "Ese nickname ya está en uso" };
   }
 
   // Register with Supabase Auth
@@ -67,7 +68,7 @@ export async function registerAction(
   });
 
   if (authError || !authData.user) {
-    return { success: false, error: authError?.message ?? "Registration failed" };
+    return { success: false, error: authError?.message ?? "Error al registrarse" };
   }
 
   // Create user in DB
@@ -83,9 +84,8 @@ export async function registerAction(
       },
     });
   } catch (err) {
-    // Cleanup Supabase user if DB creation fails
     console.error("DB user creation failed:", err);
-    return { success: false, error: "Account creation failed. Please try again." };
+    return { success: false, error: "Error al crear la cuenta. Intentá de nuevo." };
   }
 
   revalidatePath("/", "layout");
@@ -102,14 +102,14 @@ export async function loginAction(
 
   const parsed = loginSchema.safeParse(raw);
   if (!parsed.success) {
-    return { success: false, error: "Invalid email or password" };
+    return { success: false, error: "Email o contraseña inválidos" };
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    return { success: false, error: "Invalid credentials" };
+    return { success: false, error: "Credenciales incorrectas" };
   }
 
   revalidatePath("/", "layout");
