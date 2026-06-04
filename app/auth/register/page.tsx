@@ -12,15 +12,15 @@ import { registerAction, checkNicknameAction } from "@/actions/auth";
 import { useToast } from "@/hooks/use-toast";
 
 const schema = z.object({
-  firstName: z.string().min(2, "At least 2 characters"),
-  lastName: z.string().min(2, "At least 2 characters"),
+  firstName: z.string().min(2, "Mínimo 2 caracteres"),
+  lastName: z.string().min(2, "Mínimo 2 caracteres"),
   nickname: z
     .string()
-    .min(3, "At least 3 characters")
-    .max(20, "Max 20 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Letters, numbers, underscores only"),
-  email: z.string().email("Invalid email"),
-  password: z.string().min(8, "At least 8 characters"),
+    .min(3, "Mínimo 3 caracteres")
+    .max(20, "Máximo 20 caracteres")
+    .regex(/^[a-zA-Z0-9_]+$/, "Solo letras, números y guión bajo"),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(8, "Mínimo 8 caracteres"),
   curso: z.string().optional(),
 });
 
@@ -50,7 +50,7 @@ export default function RegisterPage() {
 
   const onSubmit = (data: FormData) => {
     if (nicknameStatus === "taken") {
-      toast({ title: "That nickname is already taken", variant: "destructive" });
+      toast({ title: "Ese nickname ya está en uso", variant: "destructive" });
       return;
     }
 
@@ -61,7 +61,7 @@ export default function RegisterPage() {
       const result = await registerAction(formData);
 
       if (result.success) {
-        toast({ title: "Account created! Welcome 🎉" });
+        toast({ title: "¡Cuenta creada! Bienvenido 🎉" });
         router.push("/fixture");
         router.refresh();
       } else {
@@ -76,10 +76,10 @@ export default function RegisterPage() {
         {/* Logo */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600">
-            <span className="text-white font-bold text-xl">N</span>
+            <span className="text-white font-bold text-xl">S</span>
           </div>
-          <h1 className="text-xl font-bold text-white">Create your account</h1>
-          <p className="mt-1 text-sm text-slate-400">Join Next World Cup 2026</p>
+          <h1 className="text-xl font-bold text-white">Creá tu cuenta</h1>
+          <p className="mt-1 text-sm text-slate-400">Unite al Prode Sodimac 2026</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -87,7 +87,7 @@ export default function RegisterPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                First name
+                Nombre
               </label>
               <input
                 {...register("firstName")}
@@ -100,7 +100,7 @@ export default function RegisterPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                Last name
+                Apellido
               </label>
               <input
                 {...register("lastName")}
@@ -116,7 +116,7 @@ export default function RegisterPage() {
           {/* Nickname */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              Nickname <span className="text-slate-500">(public, unique)</span>
+              Nickname <span className="text-slate-500">(público, único)</span>
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">@</span>
@@ -124,7 +124,7 @@ export default function RegisterPage() {
                 {...register("nickname", {
                   onChange: (e) => checkNickname(e.target.value),
                 })}
-                placeholder="goat_predictor"
+                placeholder="crack_predictor"
                 className="w-full rounded-xl border border-slate-700 bg-slate-800/50 pl-8 pr-10 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -143,10 +143,10 @@ export default function RegisterPage() {
               <p className="mt-1 text-xs text-red-400">{errors.nickname.message}</p>
             )}
             {nicknameStatus === "taken" && (
-              <p className="mt-1 text-xs text-red-400">Nickname already taken</p>
+              <p className="mt-1 text-xs text-red-400">Nickname ya en uso</p>
             )}
             {nicknameStatus === "available" && (
-              <p className="mt-1 text-xs text-green-400">Nickname available ✓</p>
+              <p className="mt-1 text-xs text-green-400">Nickname disponible ✓</p>
             )}
           </div>
 
@@ -157,7 +157,7 @@ export default function RegisterPage() {
               {...register("email")}
               type="email"
               autoComplete="email"
-              placeholder="you@email.com"
+              placeholder="vos@email.com"
               className="w-full rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
             />
             {errors.email && (
@@ -167,12 +167,12 @@ export default function RegisterPage() {
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Contraseña</label>
             <input
               {...register("password")}
               type="password"
               autoComplete="new-password"
-              placeholder="Min. 8 characters"
+              placeholder="Mín. 8 caracteres"
               className="w-full rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
             />
             {errors.password && (
@@ -183,11 +183,11 @@ export default function RegisterPage() {
           {/* Curso (optional) */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              Class <span className="text-slate-500">(optional)</span>
+              Área / Sector <span className="text-slate-500">(opcional)</span>
             </label>
             <input
               {...register("curso")}
-              placeholder="e.g. Upper Intermediate B"
+              placeholder="ej. Logística, Ventas..."
               className="w-full rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors text-sm"
             />
           </div>
@@ -197,14 +197,14 @@ export default function RegisterPage() {
             disabled={isPending || nicknameStatus === "taken"}
             className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {isPending ? "Creating account..." : "Create account"}
+            {isPending ? "Creando cuenta..." : "Crear cuenta"}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-400">
-          Already have an account?{" "}
+          ¿Ya tenés cuenta?{" "}
           <Link href="/auth/login" className="text-blue-400 hover:text-blue-300">
-            Sign in
+            Ingresar
           </Link>
         </p>
       </div>
