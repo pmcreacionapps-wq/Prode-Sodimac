@@ -69,5 +69,10 @@
     "tsx": "^4.19.0",
     "typescript": "^5"
   },
-  "_buildId": "postcss-fix-v1"
+  "postcss": {
+    "plugins": {
+      "tailwindcss": {}
+    }
+  },
+  "_buildId": "postcss-inline-v2"
 }
