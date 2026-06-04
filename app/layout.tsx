@@ -4,7 +4,6 @@ import "@/styles/globals.css";
 import { Providers } from "@/components/shared/providers";
 import { Toaster } from "@/components/ui/toaster";
 
-
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
@@ -13,26 +12,26 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Next World Cup 2026 | Next English Institute",
-    template: "%s | Next World Cup 2026",
+    default: "Prode Sodimac 2026 | Equipo Sodimac",
+    template: "%s | Prode Sodimac 2026",
   },
   description:
-    "Predict FIFA World Cup 2026 matches and compete with your classmates at Next English Institute.",
-  keywords: ["World Cup 2026", "FIFA", "prode", "predictions", "Next English Institute"],
-  authors: [{ name: "Next English Institute" }],
-  creator: "Next English Institute",
+    "Predecí los partidos del Mundial FIFA 2026 y competí con tu equipo de Sodimac.",
+  keywords: ["Mundial 2026", "FIFA", "prode", "predicciones", "Sodimac"],
+  authors: [{ name: "Equipo Sodimac" }],
+  creator: "Equipo Sodimac",
   openGraph: {
     type: "website",
-    locale: "en_US",
+    locale: "es_AR",
     url: process.env.NEXT_PUBLIC_APP_URL,
-    title: "Next World Cup 2026",
-    description: "Predict FIFA World Cup 2026 matches and compete with classmates.",
-    siteName: "Next World Cup 2026",
+    title: "Prode Sodimac 2026",
+    description: "Predecí los partidos del Mundial FIFA 2026 y competí con tu equipo.",
+    siteName: "Prode Sodimac 2026",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Next World Cup 2026",
-    description: "Predict FIFA World Cup 2026 matches and compete with classmates.",
+    title: "Prode Sodimac 2026",
+    description: "Predecí los partidos del Mundial FIFA 2026 y competí con tu equipo.",
   },
   icons: {
     icon: "/favicon.ico",
@@ -53,7 +52,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={inter.variable}>
+    <html lang="es" suppressHydrationWarning className={inter.variable}>
       <body className="min-h-screen bg-background font-sans antialiased">
         <Providers>
           {children}
