@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ["localhost:3000", "prode-sodimac.vercel.app"],
+      allowedOrigins: ["localhost:3000"],
     },
   },
 };
