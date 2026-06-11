@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { ActionResponse, Prediction } from "@/types";
 
 const predictionSchema = z.object({
-  matchId: z.string().cuid(),
+  matchId: z.string().min(1),
   predictedHomeScore: z.number().int().min(0).max(99),
   predictedAwayScore: z.number().int().min(0).max(99),
 });
