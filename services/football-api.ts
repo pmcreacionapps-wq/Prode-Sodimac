@@ -270,6 +270,111 @@ export async function syncLiveMatches(): Promise<{
 }
 
 /**
+ * Upsert a team from API data.
+ */
+async function upsertTeam(apiTeam: APITeam): Promise<string> {
+  const team = await prisma.team.upsert({
+    where: { apiId: apiTeam.id },
+    create: {
+      name: apiTeam.name,
+      shortName: apiTeam.name.slice(0, 3).toUpperCase(),
+      flagUrl: apiTeam.logo,
+      apiId: apiTeam.id,
+    },
+    update: {
+      name: apiTeam.name,
+      flagUrl: apiTeam.logo,
+    },
+  });
+  return team.id;
+}
+
+/**
+ * Sync all fixtures from API-Football for the 2026 World Cup.
+ */
+export async function syncAllFixtures(): Promise<{
+  synced: number;
+  errors: string[];
+}> {
+  let synced = 0;
+  const errors: string[] = [];
+
+  try {
+    const fixtures = await apiFetch<APIFixture[]>(
+      `/fixtures?league=${WC_2026_LEAGUE_ID}&season=${WC_2026_SEASON}`
+    );
+
+    for (const fixture of fixtures) {
+      try {
+        const homeTeamId = await upsertTeam(fixture.teams.home);
+        const awayTeamId = await upsertTeam(fixture.teams.away);
+
+        const phase = mapRoundToPhase(fixture.league.round);
+        const status = mapStatus(fixture.fixture.status.short);
+        const kickoffAt = new Date(fixture.fixture.date);
+        const predictionsLocked =
+          new Date() >= kickoffAt || status !== "SCHEDULED";
+
+        let winnerId: string | null = null;
+        if (
+          status === "FINISHED" &&
+          fixture.goals.home !== null &&
+          fixture.goals.away !== null
+        ) {
+          if (fixture.goals.home > fixture.goals.away) winnerId = homeTeamId;
+          else if (fixture.goals.away > fixture.goals.home)
+            winnerId = awayTeamId;
+        }
+
+        await prisma.match.upsert({
+          where: { apiId: fixture.fixture.id },
+          create: {
+            apiId: fixture.fixture.id,
+            homeTeamId,
+            awayTeamId,
+            kickoffAt,
+            venue: fixture.fixture.venue?.name ?? null,
+            city: fixture.fixture.venue?.city ?? null,
+            phase,
+            groupName: fixture.league.group ?? null,
+            roundName: fixture.league.round,
+            status,
+            homeScore: fixture.goals.home,
+            awayScore: fixture.goals.away,
+            winnerId,
+            predictionsLocked,
+          },
+          update: {
+            kickoffAt,
+            venue: fixture.fixture.venue?.name ?? null,
+            city: fixture.fixture.venue?.city ?? null,
+            status,
+            homeScore: fixture.goals.home,
+            awayScore: fixture.goals.away,
+            winnerId,
+            predictionsLocked,
+          },
+        });
+
+        synced++;
+      } catch (err) {
+        errors.push(
+          `Fixture ${fixture.fixture.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    }
+  } catch (err) {
+    errors.push(
+      `API fetch failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  return { synced, errors };
+}
+
+/**
  * Lock predictions for matches starting in the next 5 minutes.
  */
 export async function lockUpcomingMatches(): Promise<void> {
