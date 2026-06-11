@@ -91,7 +91,6 @@ interface APIFixture {
 
 /**
  * Normalize team name for fuzzy matching.
- * Handles differences like "South Korea" vs "Korea Republic", etc.
  */
 function normalizeTeamName(name: string): string {
   return name
@@ -110,7 +109,6 @@ function teamsMatch(apiName: string, dbName: string): boolean {
 
   if (api === db) return true;
 
-  // Common name variations
   const aliases: Record<string, string[]> = {
     "korea republic": ["south korea"],
     "south korea": ["korea republic"],
@@ -123,7 +121,6 @@ function teamsMatch(apiName: string, dbName: string): boolean {
     "bosnia and herzegovina": ["bosnia herzegovina"],
     "cape verde": ["cabo verde"],
     "cabo verde": ["cape verde"],
-    "new zealand": ["new zealand"],
     "turkiye": ["turkey"],
     "turkey": ["turkiye"],
     "curacao": ["curaçao"],
@@ -137,7 +134,6 @@ function teamsMatch(apiName: string, dbName: string): boolean {
   const dbAliases = aliases[db] ?? [];
   if (dbAliases.includes(api)) return true;
 
-  // Partial match fallback (one contains the other)
   if (api.includes(db) || db.includes(api)) return true;
 
   return false;
@@ -153,7 +149,7 @@ async function findMatchInDB(fixture: APIFixture) {
 
   const candidates = await prisma.match.findMany({
     where: {
-      kickoff_at: {
+      kickoffAt: {
         gte: windowStart,
         lte: windowEnd,
       },
@@ -167,10 +163,7 @@ async function findMatchInDB(fixture: APIFixture) {
   for (const match of candidates) {
     const homeMatch = teamsMatch(fixture.teams.home.name, match.homeTeam.name);
     const awayMatch = teamsMatch(fixture.teams.away.name, match.awayTeam.name);
-
-    if (homeMatch && awayMatch) {
-      return match;
-    }
+    if (homeMatch && awayMatch) return match;
   }
 
   return null;
@@ -196,7 +189,6 @@ export async function syncLiveMatches(): Promise<{
     for (const fixture of fixtures) {
       try {
         const status = mapStatus(fixture.fixture.status.short);
-
         const match = await findMatchInDB(fixture);
 
         if (!match) {
@@ -206,33 +198,22 @@ export async function syncLiveMatches(): Promise<{
           continue;
         }
 
-        // Store api_id if not set yet (for future use)
-        const updateData: Record<string, unknown> = {
-          status,
-          home_score: fixture.goals.home,
-          away_score: fixture.goals.away,
-          predictions_locked:
-            status !== "SCHEDULED" || new Date() >= match.kickoff_at,
-        };
-
-        if (!match.api_id) {
-          updateData.api_id = fixture.fixture.id;
-        }
-
-        const wasFinished =
-          match.status !== "FINISHED" && status === "FINISHED";
+        const wasFinished = match.status !== "FINISHED" && status === "FINISHED";
 
         await prisma.match.update({
           where: { id: match.id },
-          data: updateData,
+          data: {
+            status,
+            homeScore: fixture.goals.home,
+            awayScore: fixture.goals.away,
+            predictionsLocked:
+              status !== "SCHEDULED" || new Date() >= match.kickoffAt,
+            // Store apiId if not set yet
+            ...(match.apiId == null ? { apiId: fixture.fixture.id } : {}),
+          },
         });
 
-        // If just finished, score predictions
-        if (
-          wasFinished &&
-          fixture.goals.home !== null &&
-          fixture.goals.away !== null
-        ) {
+        if (wasFinished && fixture.goals.home !== null && fixture.goals.away !== null) {
           const { scoreMatchPredictions } = await import("@/services/scoring");
           await scoreMatchPredictions(match.id);
 
@@ -322,8 +303,7 @@ export async function syncAllFixtures(): Promise<{
           fixture.goals.away !== null
         ) {
           if (fixture.goals.home > fixture.goals.away) winnerId = homeTeamId;
-          else if (fixture.goals.away > fixture.goals.home)
-            winnerId = awayTeamId;
+          else if (fixture.goals.away > fixture.goals.home) winnerId = awayTeamId;
         }
 
         await prisma.match.upsert({
@@ -383,9 +363,9 @@ export async function lockUpcomingMatches(): Promise<void> {
 
   await prisma.match.updateMany({
     where: {
-      predictions_locked: false,
-      kickoff_at: { lte: fiveMinutesFromNow },
+      predictionsLocked: false,
+      kickoffAt: { lte: fiveMinutesFromNow },
     },
-    data: { predictions_locked: true },
+    data: { predictionsLocked: true },
   });
 }
