@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import type { MatchPhase, MatchStatus } from "@prisma/client";
+import type { MatchPhase, MatchStatus } from "@/types/enums";
 
 const API_FOOTBALL_BASE = "https://v3.football.api-sports.io";
-// FIFA World Cup 2026 league ID in API-Football
-const WC_2026_LEAGUE_ID = 1; // Will be confirmed closer to tournament
+const WC_2026_LEAGUE_ID = 1;
 const WC_2026_SEASON = 2026;
 
 async function apiFetch<T>(endpoint: string): Promise<T> {
@@ -22,9 +21,6 @@ async function apiFetch<T>(endpoint: string): Promise<T> {
   return data.response as T;
 }
 
-/**
- * Map API-Football round string to our MatchPhase enum.
- */
 function mapRoundToPhase(round: string): MatchPhase {
   const r = round.toLowerCase();
   if (r.includes("group")) return "GROUP";
@@ -37,12 +33,9 @@ function mapRoundToPhase(round: string): MatchPhase {
   return "GROUP";
 }
 
-/**
- * Map API-Football status to our MatchStatus enum.
- */
 function mapStatus(short: string): MatchStatus {
   switch (short) {
-    case "NS": // Not Started
+    case "NS":
       return "SCHEDULED";
     case "1H":
     case "2H":
@@ -97,108 +90,95 @@ interface APIFixture {
 }
 
 /**
- * Upsert a team from API data.
+ * Normalize team name for fuzzy matching.
+ * Handles differences like "South Korea" vs "Korea Republic", etc.
  */
-async function upsertTeam(apiTeam: APITeam): Promise<string> {
-  const team = await prisma.team.upsert({
-    where: { apiId: apiTeam.id },
-    create: {
-      name: apiTeam.name,
-      shortName: apiTeam.name.slice(0, 3).toUpperCase(),
-      flagUrl: apiTeam.logo,
-      apiId: apiTeam.id,
-    },
-    update: {
-      name: apiTeam.name,
-      flagUrl: apiTeam.logo,
-    },
-  });
-  return team.id;
+function normalizeTeamName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
- * Sync all fixtures from API-Football for the 2026 World Cup.
+ * Check if two team names are a match (handles common API name variations).
  */
-export async function syncAllFixtures(): Promise<{
-  synced: number;
-  errors: string[];
-}> {
-  let synced = 0;
-  const errors: string[] = [];
+function teamsMatch(apiName: string, dbName: string): boolean {
+  const api = normalizeTeamName(apiName);
+  const db = normalizeTeamName(dbName);
 
-  try {
-    const fixtures = await apiFetch<APIFixture[]>(
-      `/fixtures?league=${WC_2026_LEAGUE_ID}&season=${WC_2026_SEASON}`
-    );
+  if (api === db) return true;
 
-    for (const fixture of fixtures) {
-      try {
-        const homeTeamId = await upsertTeam(fixture.teams.home);
-        const awayTeamId = await upsertTeam(fixture.teams.away);
+  // Common name variations
+  const aliases: Record<string, string[]> = {
+    "korea republic": ["south korea"],
+    "south korea": ["korea republic"],
+    "republic of ireland": ["ireland"],
+    "dr congo": ["rd congo", "democratic republic of congo", "congo dr"],
+    "rd congo": ["dr congo", "democratic republic of congo"],
+    "ivory coast": ["cote d ivoire", "cote divoire"],
+    "cote d ivoire": ["ivory coast"],
+    "bosnia herzegovina": ["bosnia and herzegovina", "bosnia herzegovina"],
+    "bosnia and herzegovina": ["bosnia herzegovina"],
+    "cape verde": ["cabo verde"],
+    "cabo verde": ["cape verde"],
+    "new zealand": ["new zealand"],
+    "turkiye": ["turkey"],
+    "turkey": ["turkiye"],
+    "curacao": ["curaçao"],
+    "czechia": ["czech republic"],
+    "czech republic": ["czechia"],
+  };
 
-        const phase = mapRoundToPhase(fixture.league.round);
-        const status = mapStatus(fixture.fixture.status.short);
-        const kickoffAt = new Date(fixture.fixture.date);
-        const predictionsLocked = new Date() >= kickoffAt || status !== "SCHEDULED";
+  const apiAliases = aliases[api] ?? [];
+  if (apiAliases.includes(db)) return true;
 
-        // Determine winner
-        let winnerId: string | null = null;
-        if (
-          status === "FINISHED" &&
-          fixture.goals.home !== null &&
-          fixture.goals.away !== null
-        ) {
-          if (fixture.goals.home > fixture.goals.away) winnerId = homeTeamId;
-          else if (fixture.goals.away > fixture.goals.home) winnerId = awayTeamId;
-          // null = draw
-        }
+  const dbAliases = aliases[db] ?? [];
+  if (dbAliases.includes(api)) return true;
 
-        await prisma.match.upsert({
-          where: { apiId: fixture.fixture.id },
-          create: {
-            apiId: fixture.fixture.id,
-            homeTeamId,
-            awayTeamId,
-            kickoffAt,
-            venue: fixture.fixture.venue?.name ?? null,
-            city: fixture.fixture.venue?.city ?? null,
-            phase,
-            groupName: fixture.league.group ?? null,
-            roundName: fixture.league.round,
-            status,
-            homeScore: fixture.goals.home,
-            awayScore: fixture.goals.away,
-            winnerId,
-            predictionsLocked,
-          },
-          update: {
-            kickoffAt,
-            venue: fixture.fixture.venue?.name ?? null,
-            city: fixture.fixture.venue?.city ?? null,
-            status,
-            homeScore: fixture.goals.home,
-            awayScore: fixture.goals.away,
-            winnerId,
-            predictionsLocked,
-          },
-        });
+  // Partial match fallback (one contains the other)
+  if (api.includes(db) || db.includes(api)) return true;
 
-        synced++;
-      } catch (err) {
-        errors.push(
-          `Fixture ${fixture.fixture.id}: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
+  return false;
+}
+
+/**
+ * Find our DB match by comparing kickoff time (±90 min window) and team names.
+ */
+async function findMatchInDB(fixture: APIFixture) {
+  const apiKickoff = new Date(fixture.fixture.date);
+  const windowStart = new Date(apiKickoff.getTime() - 90 * 60 * 1000);
+  const windowEnd = new Date(apiKickoff.getTime() + 90 * 60 * 1000);
+
+  const candidates = await prisma.match.findMany({
+    where: {
+      kickoff_at: {
+        gte: windowStart,
+        lte: windowEnd,
+      },
+    },
+    include: {
+      homeTeam: true,
+      awayTeam: true,
+    },
+  });
+
+  for (const match of candidates) {
+    const homeMatch = teamsMatch(fixture.teams.home.name, match.homeTeam.name);
+    const awayMatch = teamsMatch(fixture.teams.away.name, match.awayTeam.name);
+
+    if (homeMatch && awayMatch) {
+      return match;
     }
-  } catch (err) {
-    errors.push(`API fetch failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  return { synced, errors };
+  return null;
 }
 
 /**
  * Sync live and recently finished matches only (for frequent cron).
+ * Matches by kickoff time + team names instead of api_id.
  */
 export async function syncLiveMatches(): Promise<{
   updated: number;
@@ -208,7 +188,6 @@ export async function syncLiveMatches(): Promise<{
   const errors: string[] = [];
 
   try {
-    // Get matches happening today
     const today = new Date().toISOString().split("T")[0];
     const fixtures = await apiFetch<APIFixture[]>(
       `/fixtures?league=${WC_2026_LEAGUE_ID}&season=${WC_2026_SEASON}&date=${today}`
@@ -218,33 +197,45 @@ export async function syncLiveMatches(): Promise<{
       try {
         const status = mapStatus(fixture.fixture.status.short);
 
-        // Find match in our DB
-        const match = await prisma.match.findUnique({
-          where: { apiId: fixture.fixture.id },
-          include: { homeTeam: true, awayTeam: true },
-        });
+        const match = await findMatchInDB(fixture);
 
-        if (!match) continue;
+        if (!match) {
+          errors.push(
+            `No DB match found for: ${fixture.teams.home.name} vs ${fixture.teams.away.name} at ${fixture.fixture.date}`
+          );
+          continue;
+        }
 
-        const wasFinished = match.status !== "FINISHED" && status === "FINISHED";
+        // Store api_id if not set yet (for future use)
+        const updateData: Record<string, unknown> = {
+          status,
+          home_score: fixture.goals.home,
+          away_score: fixture.goals.away,
+          predictions_locked:
+            status !== "SCHEDULED" || new Date() >= match.kickoff_at,
+        };
+
+        if (!match.api_id) {
+          updateData.api_id = fixture.fixture.id;
+        }
+
+        const wasFinished =
+          match.status !== "FINISHED" && status === "FINISHED";
 
         await prisma.match.update({
           where: { id: match.id },
-          data: {
-            status,
-            homeScore: fixture.goals.home,
-            awayScore: fixture.goals.away,
-            predictionsLocked:
-              status !== "SCHEDULED" || new Date() >= match.kickoffAt,
-          },
+          data: updateData,
         });
 
         // If just finished, score predictions
-        if (wasFinished && fixture.goals.home !== null && fixture.goals.away !== null) {
+        if (
+          wasFinished &&
+          fixture.goals.home !== null &&
+          fixture.goals.away !== null
+        ) {
           const { scoreMatchPredictions } = await import("@/services/scoring");
           await scoreMatchPredictions(match.id);
 
-          // Notify users their match result is in
           await prisma.notification.createMany({
             data: (
               await prisma.prediction.findMany({
@@ -254,7 +245,7 @@ export async function syncLiveMatches(): Promise<{
             ).map(({ userId }) => ({
               userId,
               type: "SCORE_UPDATED" as const,
-              title: "Results updated! ⚽",
+              title: "¡Resultado actualizado! ⚽",
               body: `${match.homeTeam.name} ${fixture.goals.home} - ${fixture.goals.away} ${match.awayTeam.name}`,
             })),
           });
@@ -263,12 +254,16 @@ export async function syncLiveMatches(): Promise<{
         updated++;
       } catch (err) {
         errors.push(
-          `Fixture ${fixture.fixture.id}: ${err instanceof Error ? err.message : String(err)}`
+          `Fixture ${fixture.fixture.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
         );
       }
     }
   } catch (err) {
-    errors.push(`API fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+    errors.push(
+      `API fetch failed: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 
   return { updated, errors };
@@ -276,7 +271,6 @@ export async function syncLiveMatches(): Promise<{
 
 /**
  * Lock predictions for matches starting in the next 5 minutes.
- * Called by cron every minute during match days.
  */
 export async function lockUpcomingMatches(): Promise<void> {
   const now = new Date();
@@ -284,9 +278,9 @@ export async function lockUpcomingMatches(): Promise<void> {
 
   await prisma.match.updateMany({
     where: {
-      predictionsLocked: false,
-      kickoffAt: { lte: fiveMinutesFromNow },
+      predictions_locked: false,
+      kickoff_at: { lte: fiveMinutesFromNow },
     },
-    data: { predictionsLocked: true },
+    data: { predictions_locked: true },
   });
 }
