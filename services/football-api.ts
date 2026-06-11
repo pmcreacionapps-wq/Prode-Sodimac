@@ -369,3 +369,4 @@ export async function lockUpcomingMatches(): Promise<void> {
     data: { predictionsLocked: true },
   });
 }
+
