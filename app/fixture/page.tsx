@@ -7,13 +7,13 @@ import { SemifinalistPicksCard } from "@/components/fixture/semifinalist-picks-c
 import type { MatchPhase } from "@/types";
 
 const PHASE_ORDER: MatchPhase[] = [
-  "GROUP",
   "ROUND_OF_32",
   "ROUND_OF_16",
   "QUARTER_FINAL",
   "SEMI_FINAL",
   "THIRD_PLACE",
   "FINAL",
+  "GROUP",
 ];
 
 const PHASE_LABELS: Record<MatchPhase, string> = {
@@ -60,6 +60,8 @@ export default async function FixturePage() {
     userPredictions.map((p) => [p.matchId, p])
   );
 
+  const knockoutPhases = PHASE_ORDER.filter((p) => p !== "GROUP");
+
   return (
     <div className="space-y-8">
       {/* Page header */}
@@ -89,16 +91,45 @@ export default async function FixturePage() {
         </div>
       ) : (
         <Suspense fallback={<FixtureSkeleton rows={3} />}>
-          {(Object.entries(byPhase) as [MatchPhase, typeof matches][]).map(
-            ([phase, phaseMatches]) => (
+          {/* Knockout phases */}
+          {knockoutPhases
+            .filter((phase) => byPhase[phase])
+            .map((phase) => (
               <FixturePhaseSection
                 key={phase}
                 phase={phase}
                 label={PHASE_LABELS[phase]}
-                matches={phaseMatches}
+                matches={byPhase[phase]}
                 predictionMap={predMap}
               />
-            )
+            ))}
+
+          {/* Group stage archived */}
+          {byPhase["GROUP"] && (
+            <details className="group">
+              <summary className="flex items-center gap-2 cursor-pointer list-none select-none py-2">
+                <span className="text-lg font-semibold">Group Stage</span>
+                <span className="text-xs text-muted-foreground border rounded px-2 py-0.5">
+                  Archivada
+                </span>
+                <svg
+                  className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </summary>
+              <div className="mt-4">
+                <FixturePhaseSection
+                  phase="GROUP"
+                  label="Group Stage"
+                  matches={byPhase["GROUP"]}
+                  predictionMap={predMap}
+                />
+              </div>
+            </details>
           )}
         </Suspense>
       )}
