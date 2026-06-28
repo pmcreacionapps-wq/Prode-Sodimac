@@ -1,11 +1,37 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Image from "next/image";
-import { Trophy, X } from "lucide-react";
+import { Trophy, X, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { saveSemifinalistsAction } from "@/actions/predictions";
 import { useToast } from "@/hooks/use-toast";
+
+// Martes 30 de junio 00:00 hora Argentina = UTC-3
+const LOCK_DATE = new Date("2026-06-30T03:00:00Z");
+
+function useCountdown(target: Date) {
+  const [timeLeft, setTimeLeft] = useState(() => target.getTime() - Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeLeft(target.getTime() - Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [target]);
+
+  return timeLeft;
+}
+
+function formatCountdown(ms: number) {
+  if (ms <= 0) return null;
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return { days, hours, minutes, seconds };
+}
 
 interface Team {
   id: string;
@@ -37,15 +63,19 @@ export function SemifinalistPicksCard({
   );
   const [isOpen, setIsOpen] = useState(false);
 
-  // Check if semis have started (if any current pick has isCorrect set)
-  const isLocked = currentPicks.some((p) => p.isCorrect !== null);
+  const msLeft = useCountdown(LOCK_DATE);
+  const isDateLocked = msLeft <= 0;
+  const isCorrectLocked = currentPicks.some((p) => p.isCorrect !== null);
+  const isLocked = isDateLocked || isCorrectLocked;
+
+  const countdown = formatCountdown(msLeft);
 
   const toggle = (teamId: string) => {
     if (isLocked) return;
     setSelected((prev) => {
       if (prev.includes(teamId)) return prev.filter((id) => id !== teamId);
       if (prev.length >= 4) {
-        toast({ title: "You can only pick 4 semifinalists", variant: "destructive" });
+        toast({ title: "Solo podés elegir 4 semifinalistas", variant: "destructive" });
         return prev;
       }
       return [...prev, teamId];
@@ -54,13 +84,13 @@ export function SemifinalistPicksCard({
 
   const handleSave = () => {
     if (selected.length !== 4) {
-      toast({ title: "Pick exactly 4 semifinalists", variant: "destructive" });
+      toast({ title: "Elegí exactamente 4 semifinalistas", variant: "destructive" });
       return;
     }
     startTransition(async () => {
       const result = await saveSemifinalistsAction(selected);
       if (result.success) {
-        toast({ title: "Semifinalist picks saved! 🏆" });
+        toast({ title: "¡Picks guardados! 🏆" });
         setIsOpen(false);
       } else {
         toast({ title: result.error, variant: "destructive" });
@@ -82,13 +112,13 @@ export function SemifinalistPicksCard({
               <Trophy className="h-5 w-5 text-yellow-500" />
             </div>
             <div>
-              <p className="font-semibold text-sm">Semifinalist picks</p>
+              <p className="font-semibold text-sm">Picks de Semifinalistas</p>
               <p className="text-xs text-muted-foreground">
-                +2 bonus points each · {selected.length}/4 picked
+                +2 puntos bonus c/u · {selected.length}/4 elegidos
               </p>
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-center">
             {selectedTeams.slice(0, 4).map((team) => (
               <div key={team.id} className="relative h-6 w-6">
                 <Image
@@ -101,10 +131,33 @@ export function SemifinalistPicksCard({
               </div>
             ))}
             {selected.length === 0 && (
-              <span className="text-xs text-muted-foreground">Pick now →</span>
+              <span className="text-xs text-muted-foreground">Elegir →</span>
             )}
           </div>
         </div>
+
+        {/* Countdown banner */}
+        {!isLocked && countdown && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20 px-3 py-2">
+            <Lock className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+            <span className="text-xs text-yellow-600 dark:text-yellow-400 font-medium">
+              Se cierra en{" "}
+              {countdown.days > 0 && `${countdown.days}d `}
+              {String(countdown.hours).padStart(2, "0")}:
+              {String(countdown.minutes).padStart(2, "0")}:
+              {String(countdown.seconds).padStart(2, "0")}
+            </span>
+          </div>
+        )}
+
+        {isLocked && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2">
+            <Lock className="h-3.5 w-3.5 text-red-500 shrink-0" />
+            <span className="text-xs text-red-500 font-medium">
+              Picks cerrados
+            </span>
+          </div>
+        )}
       </button>
 
       {isOpen && (
@@ -112,34 +165,38 @@ export function SemifinalistPicksCard({
           {isLocked ? (
             <div className="text-center py-4">
               <p className="text-sm text-muted-foreground">
-                Picks are locked — semis have started.
+                {isCorrectLocked
+                  ? "Los picks están cerrados — las semis comenzaron."
+                  : "El plazo para elegir semifinalistas ya cerró."}
               </p>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                {currentPicks.map((pick) => (
-                  <div
-                    key={pick.teamId}
-                    className={cn(
-                      "flex items-center gap-2 rounded-xl p-2 border",
-                      pick.isCorrect === true && "border-green-500/50 bg-green-500/10",
-                      pick.isCorrect === false && "border-red-500/50 bg-red-500/5",
-                      pick.isCorrect === null && "border-border"
-                    )}
-                  >
-                    <div className="relative h-8 w-8">
-                      <Image src={pick.team.flagUrl} alt={pick.team.name} fill className="object-contain" sizes="32px" />
+              {currentPicks.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {currentPicks.map((pick) => (
+                    <div
+                      key={pick.teamId}
+                      className={cn(
+                        "flex items-center gap-2 rounded-xl p-2 border",
+                        pick.isCorrect === true && "border-green-500/50 bg-green-500/10",
+                        pick.isCorrect === false && "border-red-500/50 bg-red-500/5",
+                        pick.isCorrect === null && "border-border"
+                      )}
+                    >
+                      <div className="relative h-8 w-8">
+                        <Image src={pick.team.flagUrl} alt={pick.team.name} fill className="object-contain" sizes="32px" />
+                      </div>
+                      <span className="text-sm font-medium">{pick.team.shortName}</span>
+                      {pick.isCorrect === true && (
+                        <span className="ml-auto text-xs text-green-500 font-medium">+{pick.bonusPoints}</span>
+                      )}
                     </div>
-                    <span className="text-sm font-medium">{pick.team.shortName}</span>
-                    {pick.isCorrect === true && (
-                      <span className="ml-auto text-xs text-green-500 font-medium">+{pick.bonusPoints}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <>
               <p className="text-sm text-muted-foreground mb-4">
-                Select the 4 teams you think will reach the semifinals. Earn +2 bonus points for each correct pick.
+                Elegí los 4 equipos que creés que llegarán a las semifinales. Ganás +2 puntos bonus por cada acierto.
               </p>
 
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto pr-1">
@@ -167,7 +224,7 @@ export function SemifinalistPicksCard({
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
-                  {selected.length}/4 selected
+                  {selected.length}/4 seleccionados
                 </p>
                 <button
                   onClick={handleSave}
@@ -179,7 +236,7 @@ export function SemifinalistPicksCard({
                       : "bg-muted text-muted-foreground cursor-not-allowed"
                   )}
                 >
-                  {isPending ? "Saving..." : "Save picks"}
+                  {isPending ? "Guardando..." : "Guardar picks"}
                 </button>
               </div>
             </>
