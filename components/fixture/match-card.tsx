@@ -22,6 +22,25 @@ interface MatchCardProps {
   prediction?: PredictionData | null;
 }
 
+function TeamFlag({ flagUrl, name, size = 48 }: { flagUrl: string; name: string; size?: number }) {
+  const isTbd = !flagUrl || name === "TBD";
+  if (isTbd) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-full bg-muted text-muted-foreground font-bold text-lg"
+        style={{ width: size, height: size }}
+      >
+        ?
+      </div>
+    );
+  }
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <Image src={flagUrl} alt={name} fill className="object-contain" sizes={`${size}px`} />
+    </div>
+  );
+}
+
 export function MatchCard({ match, prediction }: MatchCardProps) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -107,35 +126,21 @@ export function MatchCard({ match, prediction }: MatchCardProps) {
         <div className="flex items-center justify-between gap-4 my-4">
           {/* Home team */}
           <div className="flex flex-1 flex-col items-center gap-2 min-w-0">
-            <div className="relative h-12 w-12 flex-shrink-0">
-              <Image
-                src={match.homeTeam.flagUrl}
-                alt={match.homeTeam.name}
-                fill
-                className="object-contain"
-                sizes="48px"
-              />
-            </div>
+            <TeamFlag flagUrl={match.homeTeam.flagUrl} name={match.homeTeam.name} size={48} />
             <span className="text-sm font-medium text-center truncate max-w-full">
-              {match.homeTeam.shortName}
+              {match.homeTeam.shortName === "TBD" ? "Por definir" : match.homeTeam.shortName}
             </span>
           </div>
 
           {/* Score / input */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {isFinished ? (
-              // Show actual result
               <div className="flex items-center gap-1.5">
-                <span className="text-2xl font-bold tabular-nums">
-                  {match.homeScore}
-                </span>
+                <span className="text-2xl font-bold tabular-nums">{match.homeScore}</span>
                 <span className="text-muted-foreground">—</span>
-                <span className="text-2xl font-bold tabular-nums">
-                  {match.awayScore}
-                </span>
+                <span className="text-2xl font-bold tabular-nums">{match.awayScore}</span>
               </div>
             ) : isLocked ? (
-              // Locked — show user's prediction or placeholder
               <div className="flex items-center gap-1.5">
                 {prediction ? (
                   <>
@@ -148,13 +153,10 @@ export function MatchCard({ match, prediction }: MatchCardProps) {
                     </span>
                   </>
                 ) : (
-                  <span className="text-xs text-muted-foreground">
-                    No prediction
-                  </span>
+                  <span className="text-xs text-muted-foreground">No prediction</span>
                 )}
               </div>
             ) : (
-              // Open prediction inputs
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -181,17 +183,9 @@ export function MatchCard({ match, prediction }: MatchCardProps) {
 
           {/* Away team */}
           <div className="flex flex-1 flex-col items-center gap-2 min-w-0">
-            <div className="relative h-12 w-12 flex-shrink-0">
-              <Image
-                src={match.awayTeam.flagUrl}
-                alt={match.awayTeam.name}
-                fill
-                className="object-contain"
-                sizes="48px"
-              />
-            </div>
+            <TeamFlag flagUrl={match.awayTeam.flagUrl} name={match.awayTeam.name} size={48} />
             <span className="text-sm font-medium text-center truncate max-w-full">
-              {match.awayTeam.shortName}
+              {match.awayTeam.shortName === "TBD" ? "Por definir" : match.awayTeam.shortName}
             </span>
           </div>
         </div>
@@ -223,15 +217,12 @@ export function MatchCard({ match, prediction }: MatchCardProps) {
                 <>
                   <XCircle className="h-4 w-4" />
                   <span>
-                    You predicted {prediction.predictedHomeScore}–
-                    {prediction.predictedAwayScore}
+                    You predicted {prediction.predictedHomeScore}–{prediction.predictedAwayScore}
                   </span>
                 </>
               )}
             </div>
-            <span className="font-semibold">
-              +{prediction.pointsEarned} pts
-            </span>
+            <span className="font-semibold">+{prediction.pointsEarned} pts</span>
           </div>
         )}
 
