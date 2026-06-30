@@ -135,10 +135,17 @@ export function MatchCard({ match, prediction }: MatchCardProps) {
           {/* Score / input */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {isFinished ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-2xl font-bold tabular-nums">{match.homeScore}</span>
-                <span className="text-muted-foreground">—</span>
-                <span className="text-2xl font-bold tabular-nums">{match.awayScore}</span>
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-2xl font-bold tabular-nums">{match.homeScore}</span>
+                  <span className="text-muted-foreground">—</span>
+                  <span className="text-2xl font-bold tabular-nums">{match.awayScore}</span>
+                </div>
+                {match.penaltyScore && (
+                  <span className="text-xs text-muted-foreground">
+                    Penales ({match.penaltyScore})
+                  </span>
+                )}
               </div>
             ) : isLocked ? (
               <div className="flex items-center gap-1.5">
