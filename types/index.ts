@@ -65,6 +65,7 @@ export interface Match {
   homeScore?: number | null;
   awayScore?: number | null;
   winnerId?: string | null;
+  penaltyScore?: string | null;
   predictionsLocked: boolean;
 }
 
