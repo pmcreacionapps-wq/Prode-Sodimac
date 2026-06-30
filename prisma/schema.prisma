@@ -112,6 +112,9 @@ model Match {
   // Who won (null if draw or not played)
   winnerId  String? @map("winner_id")
 
+  // Penalty shootout score, e.g. "4-3" (only set when match was decided on penalties)
+  penaltyScore String? @map("penalty_score")
+
   // Prediction lock — automatically true when kickoffAt is reached
   predictionsLocked Boolean @default(false) @map("predictions_locked")
 
